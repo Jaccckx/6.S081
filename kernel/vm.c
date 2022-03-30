@@ -15,6 +15,77 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[]; // trampoline.S
 
+static int depth = 0, id = 0;
+static pte_t vir;
+void
+vmprint(pagetable_t pagetable){
+  if(!depth) printf("page table %p\n", pagetable);
+  else{
+    for(int i = 0; i < depth; i++){
+      if(i != depth - 1) printf(".. ");
+      else printf("..");
+    }
+    printf("%d: ", id);
+    printf("pte %p pa %p\n",vir, pagetable);
+  }
+  depth++;
+  for(int i = 0; i < 512 && depth <= 3; i++){
+    pte_t pte = pagetable[i];
+    //列表储存pte信息，转换为物理地址后，变为地址符号，并取地址
+    if(pte & PTE_V) {
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      id = i, vir = pte;
+      vmprint((pagetable_t)child);
+    }
+  } 
+  depth--;
+}
+
+pagetable_t
+user_kvminit(){
+  pagetable_t user_pagetable;
+  memset(user_pagetable, 0, PGSIZE);
+
+  if(mappages(kernel_pagetable, UART0, PGSIZE, UART0, PTE_R | PTE_W) != 0) panic("uvmmap");
+  // uart registers
+  if(mappages(kernel_pagetable, VIRTIO0, PGSIZE, UART0, PTE_R | PTE_W) != 0) panic("uvmmap");
+ 
+  if(mappages(kernel_pagetable, CLINT, 0x10000, CLINT, PTE_R | PTE_W) != 0) panic("uvmmap");
+ 
+  if(mappages(kernel_pagetable, PLIC, 0x400000, PLIC, PTE_R | PTE_W) != 0) panic("uvmmap");
+ 
+  if(mappages(kernel_pagetable, KERNBASE,(uint64)etext-KERNBASE, KERNBASE, PTE_R | PTE_X) != 0) panic("uvmmap");
+
+  kvmmap((uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
+
+  kvmmap(TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+}
+
+//
+
+  // uart registers
+  kvmmap(UART0, UART0, PGSIZE, PTE_R | PTE_W);
+
+  // virtio mmio disk interface
+  kvmmap(VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+
+  // CLINT
+  kvmmap(CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+
+  // PLIC
+  kvmmap(PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+
+  // map kernel text executable and read-only.
+  kvmmap(KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
+
+  // map kernel data and the physical RAM we'll make use of.
+  kvmmap((uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
+
+  // map the trampoline for trap entry/exit to
+  // the highest virtual address in the kernel.
+  kvmmap(TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+}
 /*
  * create a direct-map page table for the kernel.
  */
@@ -23,7 +94,6 @@ kvminit()
 {
   kernel_pagetable = (pagetable_t) kalloc();
   memset(kernel_pagetable, 0, PGSIZE);
-
   // uart registers
   kvmmap(UART0, UART0, PGSIZE, PTE_R | PTE_W);
 
@@ -279,6 +349,7 @@ freewalk(pagetable_t pagetable)
     pte_t pte = pagetable[i];
     if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
       // this PTE points to a lower-level page table.
+      //说明是开始页      
       uint64 child = PTE2PA(pte);
       freewalk((pagetable_t)child);
       pagetable[i] = 0;
