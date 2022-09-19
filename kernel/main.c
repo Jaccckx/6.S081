@@ -35,7 +35,7 @@ main()
     pci_init();
     sockinit();
 #endif    
-    userinit();      // first user process
+      userinit();      // first user process
     __sync_synchronize();
     started = 1;
   } else {

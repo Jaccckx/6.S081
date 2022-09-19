@@ -112,7 +112,16 @@ found:
     release(&p->lock);
     return 0;
   }
-
+  
+  p -> kpagetable = user_kvminit();
+  char *pa = kalloc();
+  if(pa == 0) panic("kalloc");
+  uint64 va = KSTACK((int) (p - proc));
+  mappages(p->kpagetable, va, PGSIZE, (uint64)pa, PTE_R | PTE_W);
+  p->ks = va;
+  // Set up new context to start executing at forkret,
+  // which returns to user space.
+  
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -150,6 +159,11 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  if(p -> ks){
+    free_ks(p->kpagetable, p->ks, 0);
+    p -> ks = 0;
+  }
+  if(p -> kpagetable) freeks_walk(p -> kpagetable);
 }
 
 // Create a user page table for a given process,
@@ -474,11 +488,12 @@ scheduler(void)
         p->state = RUNNING;
         c->proc = p;
         swtch(&c->context, &p->context);
-
+        w_satp(MAKE_SATP(myproc() -> kpagetable));
+        sfence_vma();
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
-
+        kvminithart();
         found = 1;
       }
       release(&p->lock);

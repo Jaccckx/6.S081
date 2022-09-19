@@ -156,8 +156,10 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_V)
+    if(*pte & PTE_V){
+      printf("here is wrong\n");
       panic("remap");
+    }
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;
@@ -275,6 +277,7 @@ void
 freewalk(pagetable_t pagetable)
 {
   // there are 2^9 = 512 PTEs in a page table.
+  // vmprint(pagetable);
   for(int i = 0; i < 512; i++){
     pte_t pte = pagetable[i];
     if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
@@ -439,4 +442,70 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+}
+
+int step = 0, num = 0;
+pte_t last_pte;
+void 
+vmprint(pagetable_t page){
+  if(step == 0) printf("page table %p\n", page); 
+  else{
+    for(int i = 0; i < step; i++){
+      if(i) printf(" ");
+      printf("..");
+    }
+    printf("%d: pte %p pa %p\n", num, last_pte, page);
+  }
+  if(step > 2)  return;
+  for(int i = 0; i < 512; i++){
+    pte_t pte = page[i];
+    if(((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0) || ((pte & PTE_V) && (step == 2))){
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      last_pte = pte, num = i; 
+      step++;
+      vmprint((pagetable_t)child);
+      step--;
+    }
+  }
+}
+
+pagetable_t
+user_kvminit(){
+  pagetable_t ukp = (pagetable_t)kalloc();
+  memset(ukp, 0, PGSIZE);
+  // uart registers
+  mappages(ukp, UART0, PGSIZE, UART0, PTE_R | PTE_W);
+  mappages(ukp, VIRTIO0, PGSIZE, VIRTIO0, PTE_R | PTE_W);
+  mappages(ukp, CLINT, 0x10000, CLINT, PTE_R | PTE_W);
+  mappages(ukp, PLIC, 0x400000, PLIC, PTE_R | PTE_W);
+  mappages(ukp, KERNBASE, (uint64)etext-KERNBASE, KERNBASE, PTE_R | PTE_X);
+  mappages(ukp, (uint64)etext, PHYSTOP-(uint64)etext, (uint64)etext, PTE_R | PTE_W);
+  mappages(ukp, TRAMPOLINE, PGSIZE, (uint64)trampoline, PTE_R | PTE_X);
+  return ukp;
+}
+
+void
+free_ks(pagetable_t pagetable, uint64 ks, int alloc){
+  pte_t* pte = walk(pagetable, ks, 0);
+  if(pte == 0)  panic("freeproc walk");
+  kfree((void*)PTE2PA(*pte));
+  return;
+}
+
+void
+freeks_walk(pagetable_t pagetable)
+{
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pagetable[i];
+    if((pte & PTE_V)){
+      pagetable[i] = 0;
+      if ((pte & (PTE_R|PTE_W|PTE_X)) == 0)
+      {
+        uint64 child = PTE2PA(pte);
+        freeks_walk((pagetable_t)child);
+      }
+    }
+  }
+  kfree((void*)pagetable);
 }
