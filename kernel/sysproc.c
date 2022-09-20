@@ -13,7 +13,9 @@ sys_exit(void)
   int n;
   if(argint(0, &n) < 0)
     return -1;
+  printf("sys_exit begin\n");
   exit(n);
+  printf("sys_exit end\n");
   return 0;  // not reached
 }
 

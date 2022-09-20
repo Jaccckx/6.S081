@@ -145,11 +145,16 @@ found:
 static void
 freeproc(struct proc *p)
 {
+  printf("freeproc enter\n");
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
+  if(p -> kpagetable)
+    kvmfree(p -> kpagetable, p -> sz);
+  if(p -> ks || p -> sz)
+    free_ks(p->kpagetable, p->ks, 0);
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
@@ -158,12 +163,9 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+  p->ks = 0;
   p->state = UNUSED;
-  if(p -> ks){
-    free_ks(p->kpagetable, p->ks, 0);
-    p -> ks = 0;
-  }
-  if(p -> kpagetable) freeks_walk(p -> kpagetable);
+  printf("freeproc end\n");
 }
 
 // Create a user page table for a given process,
@@ -234,7 +236,7 @@ userinit(void)
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
-
+  kvmcopy(p->pagetable, p->kpagetable, 0, p->sz);
   // prepare for the very first "return" from kernel to user.
   p->trapframe->epc = 0;      // user program counter
   p->trapframe->sp = PGSIZE;  // user stack pointer
@@ -263,7 +265,8 @@ growproc(int n)
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
-  p->sz = sz;
+  kvmcopy(p -> pagetable, p -> kpagetable, 0, sz);
+  p->sz = sz; 
   return 0;
 }
 
@@ -287,6 +290,7 @@ fork(void)
     release(&np->lock);
     return -1;
   }
+
   np->sz = p->sz;
 
   np->parent = p;
@@ -302,7 +306,7 @@ fork(void)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
-
+  kvmcopy(p -> pagetable, np -> kpagetable, 0, p -> sz);
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;

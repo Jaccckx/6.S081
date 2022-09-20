@@ -157,7 +157,6 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
     if(*pte & PTE_V){
-      printf("here is wrong\n");
       panic("remap");
     }
     *pte = PA2PTE(pa) | perm | PTE_V;
@@ -315,7 +314,6 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   uint64 pa, i;
   uint flags;
   char *mem;
-
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
@@ -508,4 +506,35 @@ freeks_walk(pagetable_t pagetable)
     }
   }
   kfree((void*)pagetable);
+}
+
+
+void kvmfree(pagetable_t pagetable, uint64 sz){
+  // if(sz > 0)
+  //   uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
+  freeks_walk(pagetable);
+}
+
+
+
+void
+kvmcopy(pagetable_t pagetable, pagetable_t kpagetable, uint64 oldsz, uint64 newsz)
+{
+    pte_t *pte_from, *pte_to;
+  uint64 a, pa;
+  uint flags;
+   
+  if (newsz < oldsz)
+    return;
+  oldsz = PGROUNDUP(oldsz);
+  for (a = oldsz; a < newsz; a += PGSIZE)
+  {
+    if ((pte_from = walk(pagetable, a, 0)) == 0)
+      panic("u2kvmcopy: pte should exist");
+    if ((pte_to = walk(kpagetable, a, 1)) == 0)  // copy the pte to the same address at kernel page table
+      panic("u2kvmcopy: walk fails");
+    pa = PTE2PA(*pte_from);
+    flags = (PTE_FLAGS(*pte_from) & (~PTE_U));
+    *pte_to = PA2PTE(pa) | flags;
+  }
 }

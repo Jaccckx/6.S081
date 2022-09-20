@@ -63,7 +63,6 @@ exec(char *path, char **argv)
 
   p = myproc();
   uint64 oldsz = p->sz;
-
   // Allocate two pages at the next page boundary.
   // Use the second as the user stack.
   sz = PGROUNDUP(sz);
@@ -71,10 +70,11 @@ exec(char *path, char **argv)
   if((sz1 = uvmalloc(pagetable, sz, sz + 2*PGSIZE)) == 0)
     goto bad;
   sz = sz1;
+  if(sz >= PLIC)  panic("proc too big");
   uvmclear(pagetable, sz-2*PGSIZE);
   sp = sz;
   stackbase = sp - PGSIZE;
-
+  kvmcopy(p -> pagetable, p -> kpagetable, 0, p -> sz);
   // Push argument strings, prepare rest of stack in ustack.
   for(argc = 0; argv[argc]; argc++) {
     if(argc >= MAXARG)
@@ -115,7 +115,6 @@ exec(char *path, char **argv)
   p->trapframe->epc = elf.entry;  // initial program counter = main
   p->trapframe->sp = sp; // initial stack pointer
   proc_freepagetable(oldpagetable, oldsz);
-
   return argc; // this ends up in a0, the first argument to main(argc, argv)
 
  bad:

@@ -182,6 +182,8 @@ void            vmprint(pagetable_t page);
 pagetable_t     user_kvminit();
 void            free_ks(pagetable_t pagetable, uint64 ks, int alloc);
 void            freeks_walk(pagetable_t pagetable);
+void             kvmcopy(pagetable_t, pagetable_t, uint64, uint64);
+void            kvmfree(pagetable_t,uint64);
 // plic.c
 void            plicinit(void);
 void            plicinithart(void);
