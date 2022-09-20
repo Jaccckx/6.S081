@@ -8,7 +8,7 @@
 
 struct spinlock tickslock;
 uint ticks;
-
+// uint64 epc;
 extern char trampoline[], uservec[], userret[];
 
 // in kernelvec.S, calls kerneltrap().
@@ -66,7 +66,21 @@ usertrap(void)
 
     syscall();
   } else if((which_dev = devintr()) != 0){
-    // ok
+    if(which_dev == 2){
+      struct trapframe exp;
+      memset(&exp, -1, sizeof exp);
+      if(memcmp(&exp, &myproc() -> ttrapframe, sizeof exp) != 0){
+        p -> count = 0;
+      }
+      else{
+        p -> count++;
+        if(p -> count == p -> time && p -> count){
+          p -> count = 0;
+          myproc() -> ttrapframe = *(myproc() -> trapframe);
+          myproc() -> trapframe -> epc = (uint64)(p -> func);
+        }
+      }
+    }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
