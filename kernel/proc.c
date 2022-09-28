@@ -93,7 +93,6 @@ static struct proc*
 allocproc(void)
 {
   struct proc *p;
-
   for(p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
     if(p->state == UNUSED) {
@@ -106,7 +105,7 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
-
+  // printf("allocproc: %d\n", p -> pid);
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     release(&p->lock);
@@ -463,7 +462,7 @@ scheduler(void)
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
-    
+    // printf("begin: %s %d %d\n", c -> proc -> name, c -> proc -> pid, 0);
     int nproc = 0;
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
@@ -476,6 +475,8 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        // printf("scheduler: name: %s , pid:%d --to-- name:%s,pid:%d\n", c -> proc -> name, c -> proc -> pid,
+        // p -> name, p -> pid);
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
@@ -514,7 +515,10 @@ sched(void)
     panic("sched interruptible");
 
   intena = mycpu()->intena;
+  // printf("sched: name: %s , pid:%d --to-- name:%s,pid:%d\n", mycpu() -> proc -> name, mycpu() -> proc -> pid,
+        // p -> name, p -> pid);
   swtch(&p->context, &mycpu()->context);
+  // printf("sched: retain to %s, pid:%d\n", p -> name, p -> pid);
   mycpu()->intena = intena;
 }
 
@@ -524,6 +528,7 @@ yield(void)
 {
   struct proc *p = myproc();
   acquire(&p->lock);
+  // printf("proc %s yild\n", myproc() -> name);
   p->state = RUNNABLE;
   sched();
   release(&p->lock);

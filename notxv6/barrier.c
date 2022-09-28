@@ -25,12 +25,15 @@ barrier_init(void)
 static void 
 barrier()
 {
-  // YOUR CODE HERE
-  //
-  // Block until all threads have called barrier() and
-  // then increment bstate.round.
-  //
-  
+  pthread_mutex_lock(&bstate.barrier_mutex);
+  bstate.nthread++;
+  // printf("bstate.nthread:%d, nthread:%d, round: %d\n", bstate.nthread, nthread, bstate.round);
+  if(bstate.nthread != nthread)
+  {
+    pthread_cond_wait(&bstate.barrier_cond, &bstate.barrier_mutex);
+  }
+  if(bstate.nthread == nthread)  bstate.round++, bstate.nthread = 0, pthread_cond_broadcast(&bstate.barrier_cond);
+  pthread_mutex_unlock(&bstate.barrier_mutex);
 }
 
 static void *
@@ -40,7 +43,7 @@ thread(void *xa)
   long delay;
   int i;
 
-  for (i = 0; i < 20000; i++) {
+  for (i = 0; i < 20; i++) {
     int t = bstate.round;
     assert (i == t);
     barrier();

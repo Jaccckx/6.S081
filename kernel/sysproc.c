@@ -69,6 +69,7 @@ sys_sleep(void)
     }
     sleep(&ticks, &tickslock);
   }
+  printf("enter kernel space\n");
   release(&tickslock);
   return 0;
 }
