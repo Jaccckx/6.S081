@@ -26,30 +26,45 @@
 struct {
   struct spinlock lock;
   struct buf buf[NBUF];
-
   // Linked list of all buffers, through prev/next.
   // Sorted by how recently the buffer was used.
   // head.next is most recent, head.prev is least.
   struct buf head;
 } bcache;
 
+// #define MOD 13
+// struct node {
+//   struct spinlock lock;
+//   struct buf buf[NBUF];
+//   struct buf head;
+// }map[MOD];
+
 void
 binit(void)
 {
   struct buf *b;
-
+  // struct node bcache;
+  
   initlock(&bcache.lock, "bcache");
+  // for(int i = 0; i < MOD; i++){
+  //   char buf[100];
+  //   snprintf(buf, 20,"bcache.bucket%d", i);
+  //   initlock(&map[i].lock, buf);
+  // }
 
   // Create linked list of buffers
-  bcache.head.prev = &bcache.head;
-  bcache.head.next = &bcache.head;
-  for(b = bcache.buf; b < bcache.buf+NBUF; b++){
-    b->next = bcache.head.next;
-    b->prev = &bcache.head;
-    initsleeplock(&b->lock, "buffer");
-    bcache.head.next->prev = b;
-    bcache.head.next = b;
-  }
+  // for(int i = 0; i < MOD; i++){
+    // bcache = map[i];
+    bcache.head.prev = &bcache.head;
+    bcache.head.next = &bcache.head;
+    for(b = bcache.buf; b < bcache.buf+NBUF; b++){
+      b->next = bcache.head.next;
+      b->prev = &bcache.head;
+      initsleeplock(&b->lock, "buffer");
+      bcache.head.next->prev = b;
+      bcache.head.next = b;
+    }
+  // }
 }
 
 // Look through buffer cache for block on device dev.
@@ -59,12 +74,38 @@ static struct buf*
 bget(uint dev, uint blockno)
 {
   struct buf *b;
-
+  // int hash = blockno % MOD;
+  // struct node bcache = map[hash];
   acquire(&bcache.lock);
+  // // Is the block already cached?
+  // for(b = bcache.head.next; b != &bcache.head; b = b->next){
+  //   if(b->dev == dev && b->blockno == blockno){
+  //     //如果已经在cached中，hold
+  //     b->refcnt++;
+  //     release(&bcache.lock);
+  //     acquiresleep(&b->lock);
+  //     return b;
+  //   }
+  // }
+
+  // // Not cached.
+  // // Recycle the least recently used (LRU) unused buffer.
+  // for(b = bcache.head.prev; b != &bcache.head; b = b->prev){
+  //   if(b->refcnt == 0) {
+  //     b->dev = dev;
+  //     b->blockno = blockno;
+  //     b->valid = 0;
+  //     b->refcnt = 1;
+  //     release(&bcache.lock);
+  //     acquiresleep(&b->lock);
+  //     return b;
+  //   }
+  // }
 
   // Is the block already cached?
   for(b = bcache.head.next; b != &bcache.head; b = b->next){
     if(b->dev == dev && b->blockno == blockno){
+      //如果已经在cached中，hold
       b->refcnt++;
       release(&bcache.lock);
       acquiresleep(&b->lock);
@@ -101,7 +142,7 @@ bread(uint dev, uint blockno)
   }
   return b;
 }
-
+//对于cache的计数和释放bcache的锁，然后睡眠锁控制读写
 // Write b's contents to disk.  Must be locked.
 void
 bwrite(struct buf *b)
@@ -120,8 +161,8 @@ brelse(struct buf *b)
     panic("brelse");
 
   releasesleep(&b->lock);
-
-  acquire(&bcache.lock);
+  // int hash = (b -> blockno) % MOD;
+  // struct node bcache = map[hash];
   b->refcnt--;
   if (b->refcnt == 0) {
     // no one is waiting for it.
@@ -138,6 +179,8 @@ brelse(struct buf *b)
 
 void
 bpin(struct buf *b) {
+  // int hash = (b -> blockno) % MOD;
+  // struct node bcache = map[hash];
   acquire(&bcache.lock);
   b->refcnt++;
   release(&bcache.lock);
@@ -145,6 +188,8 @@ bpin(struct buf *b) {
 
 void
 bunpin(struct buf *b) {
+  // int hash = (b -> blockno) % MOD;
+  // struct node bcache = map[hash];
   acquire(&bcache.lock);
   b->refcnt--;
   release(&bcache.lock);

@@ -82,9 +82,10 @@ countfree()
 {
   uint64 sz0 = (uint64)sbrk(0);
   int n = 0;
-
+  // printf("enter loop sz:%d\n", sz0);
   while(1){
     uint64 a = (uint64) sbrk(4096);
+    // printf("a: %d\n", a);
     if(a == 0xffffffffffffffff){
       break;
     }
@@ -92,12 +93,15 @@ countfree()
     *(char *)(a + 4096 - 1) = 1;
     n += 1;
   }
+  // printf("increase is ok\n");
   sbrk(-((uint64)sbrk(0) - sz0));
   return n;
 }
 
 void test2() {
+  // printf("counfree begin\n");
   int free0 = countfree();
+  // printf("counfree end\n");
   int free1;
   int n = (PHYSTOP-KERNBASE)/PGSIZE;
   printf("start test2\n");  

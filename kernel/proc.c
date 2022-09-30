@@ -567,7 +567,7 @@ sleep(void *chan, struct spinlock *lk)
     acquire(&p->lock);  //DOC: sleeplock1
     release(lk);
   }
-
+  //其实无所谓哪个锁，只要就有锁就ok
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
