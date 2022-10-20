@@ -20,6 +20,7 @@ main()
   while(1){
     *(int*)buf = blocks;
     int cc = write(fd, buf, sizeof(buf));
+    // if(blocks > 510)  printf("\nwrote %d blocks\n", blocks);
     if(cc <= 0)
       break;
     blocks++;

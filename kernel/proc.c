@@ -472,8 +472,10 @@ scheduler(void)
     intr_on();
     
     int nproc = 0;
+    // int idx = 0;
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
+      // printf("pid name %s\n", p -> name);
       if(p->state != UNUSED) {
         nproc++;
       }
@@ -483,8 +485,8 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        // printf("p first %s\n", c -> proc -> name);
         swtch(&c->context, &p->context);
-
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;

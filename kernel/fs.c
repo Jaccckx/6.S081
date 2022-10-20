@@ -379,7 +379,8 @@ bmap(struct inode *ip, uint bn)
 {
   uint addr, *a;
   struct buf *bp;
-
+  // if(bn > 526) 
+  printf("%d NDIRECT%  pd N2INDIRECT %d bn:%d\n", N2DIRECT,NDIRECT, N2INDIRECT, bn);
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0)
       ip->addrs[bn] = addr = balloc(ip->dev);
@@ -400,6 +401,29 @@ bmap(struct inode *ip, uint bn)
     brelse(bp);
     return addr;
   }
+  
+  bn -= NINDIRECT;
+  if(bn < N2INDIRECT){
+    if((addr = ip->addrs[N2DIRECT]) == 0)
+      ip->addrs[N2DIRECT] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+    if((addr = a[bn / 256]) == 0){
+      a[bn] = addr = balloc(ip->dev);
+        log_write(bp);
+    }
+    
+    struct buf* bp1 = bread(ip -> dev, addr);
+    uint* b = (uint*)bp1->data;
+    if((addr = b[bn % 256]) == 0){
+      b[bn] = addr = balloc(ip->dev);
+      log_write(bp1);
+    }
+    brelse(bp1);
+    brelse(bp);
+    // if(bn > 520) printf("ok\n");
+    return addr;
+  }
 
   panic("bmap: out of range");
 }
@@ -412,7 +436,7 @@ itrunc(struct inode *ip)
   int i, j;
   struct buf *bp;
   uint *a;
-
+  // printf("enter\n");
   for(i = 0; i < NDIRECT; i++){
     if(ip->addrs[i]){
       bfree(ip->dev, ip->addrs[i]);
@@ -432,8 +456,29 @@ itrunc(struct inode *ip)
     ip->addrs[NDIRECT] = 0;
   }
 
+  if(ip->addrs[N2DIRECT]){
+    bp = bread(ip->dev, ip->addrs[N2DIRECT]);
+    a = (uint*)bp->data;
+    for(j = 0; j < NINDIRECT; j++){
+      if(a[j]){
+        struct buf *bp1 = bread(ip->dev, a[j]);
+        uint* b = (uint*)bp1 -> data;
+        for(int k = 0; k < NINDIRECT; k++){
+          if(b[k])
+            bfree(ip -> dev, b[k]);
+        }
+        brelse(bp1);    
+        bfree(ip->dev, a[j]);
+        a[j] = 0;
+      }
+    }
+    brelse(bp);
+    bfree(ip->dev, ip->addrs[NDIRECT]);
+    ip->addrs[NDIRECT] = 0;
+  }
   ip->size = 0;
   iupdate(ip);
+  // printf("end\n");
 }
 
 // Copy stat information from inode.
@@ -495,7 +540,9 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
     return -1;
 
   for(tot=0; tot<n; tot+=m, off+=m, src+=m){
+    // printf("tot: %d\n", tot);
     bp = bread(ip->dev, bmap(ip, off/BSIZE));
+    // printf("end\n");
     m = min(n - tot, BSIZE - off%BSIZE);
     if(either_copyin(bp->data + (off % BSIZE), user_src, src, m) == -1) {
       brelse(bp);

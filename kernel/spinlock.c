@@ -21,6 +21,7 @@ initlock(struct spinlock *lk, char *name)
 void
 acquire(struct spinlock *lk)
 {
+  // printf("lk -> name %s\n", lk -> name);
   push_off(); // disable interrupts to avoid deadlock.
   if(holding(lk))
     panic("acquire");
@@ -31,7 +32,7 @@ acquire(struct spinlock *lk)
   //   amoswap.w.aq a5, a5, (s1)
   while(__sync_lock_test_and_set(&lk->locked, 1) != 0)
     ;
-
+  // printf("lk %s\n", lk -> name);
   // Tell the C compiler and the processor to not move loads or stores
   // past this point, to ensure that the critical section's memory
   // references happen strictly after the lock is acquired.

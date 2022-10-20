@@ -59,15 +59,17 @@ static struct buf*
 bget(uint dev, uint blockno)
 {
   struct buf *b;
-
+  // printf("bget begin\n");
   acquire(&bcache.lock);
-
+  // printf("bget pass\n");
   // Is the block already cached?
   for(b = bcache.head.next; b != &bcache.head; b = b->next){
+    // printf("%p\n",b);
     if(b->dev == dev && b->blockno == blockno){
       b->refcnt++;
       release(&bcache.lock);
       acquiresleep(&b->lock);
+      // printf("bget end\n");
       return b;
     }
   }
@@ -75,6 +77,7 @@ bget(uint dev, uint blockno)
   // Not cached.
   // Recycle the least recently used (LRU) unused buffer.
   for(b = bcache.head.prev; b != &bcache.head; b = b->prev){
+    // printf("%p\n",b);
     if(b->refcnt == 0) {
       b->dev = dev;
       b->blockno = blockno;
@@ -82,9 +85,11 @@ bget(uint dev, uint blockno)
       b->refcnt = 1;
       release(&bcache.lock);
       acquiresleep(&b->lock);
+      // printf("bget end\n");
       return b;
     }
   }
+  
   panic("bget: no buffers");
 }
 
@@ -92,13 +97,16 @@ bget(uint dev, uint blockno)
 struct buf*
 bread(uint dev, uint blockno)
 {
+  // printf("bread\n");
   struct buf *b;
 
   b = bget(dev, blockno);
+
   if(!b->valid) {
     virtio_disk_rw(b, 0);
     b->valid = 1;
   }
+  // printf("bread end\n");
   return b;
 }
 
