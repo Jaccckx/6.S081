@@ -291,8 +291,8 @@ ilock(struct inode *ip)
   struct buf *bp;
   struct dinode *dip;
 
-  if(ip == 0 || ip->ref < 1)
-    panic("ilock");
+  if(ip == 0)   panic("ilock2");
+  if(ip->ref < 1) panic("ilock1");
 
   acquiresleep(&ip->lock);
 
@@ -458,11 +458,12 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
   uint tot, m;
   struct buf *bp;
 
+  // printf("off:%d, n:%d, ipsize:%d\n", off, n, ip -> size);
   if(off > ip->size || off + n < off)
     return 0;
   if(off + n > ip->size)
     n = ip->size - off;
-
+  // printf("off:%d, n:%d, ipsize:%d\n", off, n, ip -> size);
   for(tot=0; tot<n; tot+=m, off+=m, dst+=m){
     bp = bread(ip->dev, bmap(ip, off/BSIZE));
     m = min(n - tot, BSIZE - off%BSIZE);
@@ -488,7 +489,7 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
 {
   uint tot, m;
   struct buf *bp;
-
+  // printf("writei: off:%p, ip:%p, n:%p\n", off, ip -> size, n);s
   if(off > ip->size || off + n < off)
     return -1;
   if(off + n > MAXFILE*BSIZE)

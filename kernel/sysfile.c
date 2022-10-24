@@ -484,3 +484,95 @@ sys_pipe(void)
   }
   return 0;
 }
+
+/*
+void* mmap(void*,uint64,int,int,int,uint64);
+int munmap(void*,uint64);
+*/
+uint64
+sys_mmap(void)
+{
+  uint64 addr, length,offset;
+  int i, fd, prot, flags;
+  struct file* fdd;
+  struct proc* p = myproc(); 
+  uint64 fail = -1;
+  if(argaddr(0, &addr) < 0 || argaddr(1, &length) < 0 || argint(2, &prot) < 0 || 
+  argint(3, &flags) < 0 || argfd(4, &fd, &fdd) < 0 || argaddr(5, &offset) < 0)
+    return fail;
+  
+  if((!fdd -> readable && (prot & PROT_READ)) ||
+    (!fdd ->writable && (prot & PROT_WRITE) &&!(flags & MAP_PRIVATE)))
+    return fail;
+  
+  for(i = 0; i < 16; i++){
+    if(p->VMA[i].active == 0){
+      p->VMA[i].active = 1;
+      break;
+    }
+  }
+  if(i == 16) return fail;
+
+  length = PGROUNDUP(length);
+  p -> sp2vma -= length;
+  p -> VMA[i].addr = p -> sp2vma;
+  addr = p -> sp2vma;
+  p -> VMA[i].length = length;
+  for(int j = 0; j < PGROUNDUP(length) / PGSIZE; j++)
+    p -> VMA[i].mask |= 1 << j;
+
+  p -> VMA[i].offset = offset;
+  int perm = 0;
+  if(prot & PROT_READ) perm |= PTE_R;
+  if(prot & PROT_WRITE) perm |= PTE_W;
+  if(prot & PROT_EXEC) perm |= PTE_X;
+  p -> VMA[i].perm = perm;
+  p -> VMA[i].fd = fd;
+  p -> VMA[i].flags = flags;
+  p -> VMA[i].fdd = filedup(fdd);
+  // printf("i:%d, fd:%d\n", i, p -> VMA[i].fdd->ref); 
+  return addr;
+}
+#define max(a,b) (a > b ? a:b)
+#define min(a,b) (a < b ? a:b)
+
+uint64
+sys_munmap(void)
+{
+  uint64 addr, length;
+  struct proc* p = myproc();
+  
+  if(argaddr(0, &addr) < 0 || argaddr(1, &length) < 0)
+    return -1;
+  int i;
+  for(i = 0; i < 16; i++){
+   if(p -> VMA[i].addr <= addr && p -> VMA[i].addr + PGROUNDUP(p -> VMA[i].length) > addr && p -> VMA[i].active){
+      break;
+    }
+  }
+  if(i == 16) panic("munmap not mmap pages");
+  exit_munmap(i, addr, length); 
+  return 0;
+}
+int mmaplazy(uint64 addr){
+  struct proc * p = myproc();
+  uint64 i;
+  for(i = 0; i < 16; i++){
+    uint64 r = 0;
+    uint64 low = p -> VMA[i].addr, high = low + p -> VMA[i].length, perm = p -> VMA[i].perm;
+    struct file * f = (p -> VMA[i]).fdd; 
+    if(addr < low || high <= addr || p -> VMA[i].active == 0)   continue;
+    // 检测是否有页表,并且假设offset一定为零,off是不是要上鎖
+    void* _page = kalloc();
+    memset(_page, 0, PGSIZE);
+    if(mappages(p -> pagetable, addr, PGSIZE, (uint64)_page, perm | PTE_U) < 0) panic("mmap lazy alloc wrong");
+
+    ilock(f->ip);
+    uint64 bias = PGROUNDDOWN(addr) - p -> VMA[i].addr, length = p -> VMA[i].length  - bias;
+    if((r = readi(f->ip, 1, PGROUNDDOWN(addr), bias, length)) > 0); 
+    iunlock(f->ip);
+    break;
+  }
+  if(i == 16) return -1;
+  return 0;
+}

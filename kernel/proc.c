@@ -119,7 +119,8 @@ found:
     release(&p->lock);
     return 0;
   }
-
+  for(int i = 0; i < 16; i++) p -> VMA[i].active = 0;
+  p -> sp2vma = TRAPFRAME - PGSIZE;
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -133,7 +134,7 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
+  
   return p;
 }
 
@@ -146,6 +147,14 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+  for(int i = 0; i < 16; i++){    
+    if(p -> VMA[i].active){
+      // printf("i: %d\n", i);
+      // exit_munmap(i, p -> VMA[i].addr, p -> VMA[i].length);
+      // printf("i: %d\n", i); 
+    }
+    // p->VMA[i].active = 0;
+  }
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -157,6 +166,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->sp2vma = 0;
 }
 
 // Create a user page table for a given process,
@@ -281,7 +291,6 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
-
   np->parent = p;
 
   // copy saved user registers.
@@ -294,6 +303,15 @@ fork(void)
   for(i = 0; i < NOFILE; i++)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
+  for(i = 0; i < 16; i++)
+    if(p -> VMA[i].active){
+      // uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
+      // mmapfork(np -> pagetable, p -> VMA[i].addr, p -> VMA[i].length / PGSIZE, 1);
+      np -> VMA[i] = p -> VMA[i];
+      // printf("forkkkkkkkkk\n");
+      np -> VMA[i].fdd = filedup(p -> VMA[i].fdd);
+    }
+
   np->cwd = idup(p->cwd);
 
   safestrcpy(np->name, p->name, sizeof(p->name));
@@ -358,6 +376,19 @@ exit(int status)
   end_op();
   p->cwd = 0;
 
+  uint64 addr = 0, length = 0;
+  int i;
+  // printf("---------addr:%p\n", addr);
+  for(i = 0; i < 16; i++){
+    // printf("^^ %p %p %d\n",p -> VMA[i].addr, p -> VMA[i].addr + PGROUNDUP(p -> VMA[i].length), p -> VMA[i].active);  
+    if(p -> VMA[i].active){
+      //  printf("i open%d\n", i);
+      addr = p -> VMA[i].addr, length = p -> VMA[i].length;
+      exit_munmap(i, addr, length);
+      p -> VMA[i].active = 0;
+    }
+  }
+  
   // we might re-parent a child to init. we can't be precise about
   // waking up init, since we can't acquire its lock once we've
   // acquired any other proc lock. so wake up init whether that's
@@ -391,7 +422,6 @@ exit(int status)
 
   p->xstate = status;
   p->state = ZOMBIE;
-
   release(&original_parent->lock);
 
   // Jump into the scheduler, never to return.

@@ -118,7 +118,7 @@ mmap_test(void)
     err("munmap (1)");
 
   printf("test mmap f: OK\n");
-    
+
   printf("test mmap private\n");
   // should be able to map file opened read-only with private writable
   // mapping
@@ -141,16 +141,18 @@ mmap_test(void)
   // file opened read-only.
   if ((fd = open(f, O_RDONLY)) == -1)
     err("open");
+
   p = mmap(0, PGSIZE*3, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (p != MAP_FAILED)
     err("mmap call should have failed");
+  // exit(0);
   if (close(fd) == -1)
     err("close");
 
   printf("test mmap read-only: OK\n");
     
   printf("test mmap read/write\n");
-  
+
   // check that mmap does allow read/write mapping of a
   // file opened read/write.
   if ((fd = open(f, O_RDWR)) == -1)
@@ -160,10 +162,10 @@ mmap_test(void)
     err("mmap (3)");
   if (close(fd) == -1)
     err("close");
-
+  // exit(0);
   // check that the mapping still works after close(fd).
   _v1(p);
-
+  // exit(0);
   // write the mapped memory.
   for (i = 0; i < PGSIZE*2; i++)
     p[i] = 'Z';
@@ -173,9 +175,9 @@ mmap_test(void)
     err("munmap (3)");
   
   printf("test mmap read/write: OK\n");
-  
+  // exit(0);
   printf("test mmap dirty\n");
-  
+  // exit(0);
   // check that the writes to the mapped memory were
   // written to the file.
   if ((fd = open(f, O_RDWR)) == -1)
@@ -184,8 +186,10 @@ mmap_test(void)
     char b;
     if (read(fd, &b, 1) != 1)
       err("read (1)");
-    if (b != 'Z')
+    if (b != 'Z'){
+      // printf("i:%d, b:%c ", i, b);
       err("file does not contain modifications");
+    }
   }
   if (close(fd) == -1)
     err("close");
@@ -199,7 +203,7 @@ mmap_test(void)
     err("munmap (4)");
 
   printf("test not-mapped unmap: OK\n");
-    
+  // exit(0);
   printf("test mmap two files\n");
   
   //
@@ -260,38 +264,46 @@ fork_test(void)
   makefile(f);
   if ((fd = open(f, O_RDONLY)) == -1)
     err("open");
+  
   unlink(f);
+
   char *p1 = mmap(0, PGSIZE*2, PROT_READ, MAP_SHARED, fd, 0);
   if (p1 == MAP_FAILED)
     err("mmap (4)");
   char *p2 = mmap(0, PGSIZE*2, PROT_READ, MAP_SHARED, fd, 0);
   if (p2 == MAP_FAILED)
-    err("mmap (5)");
-
+    err("mmap (5)"); 
+  // printf("p1:%c p2:%c\n", p1,p2);
+  // printf("--------3\n");
   // read just 2nd page.
   if(*(p1+PGSIZE) != 'A')
     err("fork mismatch (1)");
 
+  // exit(0);  
   if((pid = fork()) < 0)
     err("fork");
+  // exit(0);
   if (pid == 0) {
     _v1(p1);
+    // printf("ppp\n");
     munmap(p1, PGSIZE); // just the first page
+    // printf("ppp\n");
     exit(0); // tell the parent that the mapping looks OK.
   }
-
+  // printf("--------5\n");
   int status = -1;
   wait(&status);
-
+  // printf("--------6\n");
   if(status != 0){
     printf("fork_test failed\n");
     exit(1);
   }
-
+  // printf("here1\n");
   // check that the parent's mappings are still there.
   _v1(p1);
+  // printf("here\n");
   _v1(p2);
-
+  // printf("here2\n");
   printf("fork_test OK\n");
 }
 
