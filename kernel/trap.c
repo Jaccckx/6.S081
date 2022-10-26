@@ -67,10 +67,19 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+  } 
+  else if(r_scause() == 13 || r_scause() == 15){
+    if(cow_uvmcopy(myproc() -> pagetable, r_stval()) == -1){
+      printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+      p->killed = 1;
+    }
+  }
+  else {
+    printf("usertrap(): unexpected scause %p pid=%d, name=%s\n", r_scause(), p->pid, p -> name);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
+    exit(0);
   }
 
   if(p->killed)
@@ -147,6 +156,7 @@ kerneltrap()
     printf("scause %p\n", scause);
     printf("sepc=%p stval=%p\n", r_sepc(), r_stval());
     panic("kerneltrap");
+    // exit(-1);
   }
 
   // give up the CPU if this is a timer interrupt.

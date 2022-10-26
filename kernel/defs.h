@@ -9,6 +9,11 @@ struct sleeplock;
 struct stat;
 struct superblock;
 
+void prr(char* s);
+int CPAGESPR(uint64 addr);
+pagetable_t checkcow(uint64 va);
+// #define         PA2PID(pa) (((uint64)(pa) - KERNBASE) / PGSIZE)
+
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);
@@ -63,7 +68,8 @@ void            ramdiskrw(struct buf*);
 void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
-
+int             CPAGESDOWN(uint64);
+int             CPAGESUP(uint64);
 // log.c
 void            initlog(int, struct superblock*);
 void            log_write(struct buf*);
@@ -171,7 +177,8 @@ uint64          walkaddr(pagetable_t, uint64);
 int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
-
+int             cow_uvmcopy(pagetable_t, uint64);
+pte_t *         walk(pagetable_t,uint64,int);
 // plic.c
 void            plicinit(void);
 void            plicinithart(void);

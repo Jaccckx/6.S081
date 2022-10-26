@@ -345,6 +345,7 @@ QEMU appears to already be running.  Please exit it if possible or use
             self.proc.terminate()
 
 class GDBClient(object):
+#15
     def __init__(self, port, timeout=15):
         start = time.time()
         while True:

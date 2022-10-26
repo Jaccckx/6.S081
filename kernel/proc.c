@@ -190,6 +190,7 @@ proc_pagetable(struct proc *p)
 void
 proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
+  prr("free TRAM");
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
   uvmfree(pagetable, sz);
@@ -296,7 +297,7 @@ fork(void)
   np->state = RUNNABLE;
 
   release(&np->lock);
-
+  // printf("fork: %s, sz:%p\n", myproc() -> name, np -> sz);
   return pid;
 }
 
@@ -693,4 +694,19 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+void prr(char* s){
+    // printf("program: %s, pid:%s\n", s,myproc() -> name);
+}
+
+pagetable_t 
+checkcow(uint64 va)
+{
+    struct proc* p = myproc();
+    pte_t* pte = walk(p -> pagetable, va, 0);
+    // struct proc* p = myproc();
+    int flag = *pte & PTE_C;
+    if(flag) return p -> pagetable;
+    return 0;
 }

@@ -50,7 +50,8 @@ copyin(char *s)
       printf("write(1, %p, 8192) returned %d, not -1 or 0\n", addr, n);
       exit(1);
     }
-    
+    printf("ok\n");
+    exit(0);    
     int fds[2];
     if(pipe(fds) < 0){
       printf("pipe() failed\n");
@@ -72,7 +73,7 @@ void
 copyout(char *s)
 {
   uint64 addrs[] = { 0x80000000LL, 0xffffffffffffffff };
-
+  // printf("copy out\n");
   for(int ai = 0; ai < 2; ai++){
     uint64 addr = addrs[ai];
 
@@ -2677,7 +2678,6 @@ main(int argc, char *argv[])
     printf("Usage: usertests [-c] [testname]\n");
     exit(1);
   }
-  
   struct test {
     void (*f)(char *);
     char *s;
@@ -2695,7 +2695,7 @@ main(int argc, char *argv[])
     {reparent2, "reparent2"},
     {pgbug, "pgbug" },
     {sbrkbugs, "sbrkbugs" },
-    // {badwrite, "badwrite" },
+    {badwrite, "badwrite" },
     {badarg, "badarg" },
     {reparent, "reparent" },
     {twochildren, "twochildren"},
@@ -2778,7 +2778,7 @@ main(int argc, char *argv[])
         fail = 1;
     }
   }
-
+  
   if(fail){
     printf("SOME TESTS FAILED\n");
     exit(1);

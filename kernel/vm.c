@@ -156,9 +156,18 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_V)
+    // if((*pte & PTE_V) && (*pte & PTE_C)){
+      //step2.3.2 共享頁重寫
+      // continue;
+      // panic("remap");
+      // uint64 ppa = PTE2PA(*pte);
+      // kfree((void *)ppa);
+      // printf("==========mappages pa: %p,va:%p, a:%p,last:%p, pte:%p, num:%d\n", pa,va,a, last,ppa, CPAGESPR(ppa));
+    // }else 
+    if((*pte & PTE_V))
       panic("remap");
-    *pte = PA2PTE(pa) | perm | PTE_V;
+    //step2.3.3 增加計數,並刪除共享標誌
+    *pte = (PA2PTE(pa) | perm | PTE_V);
     if(a == last)
       break;
     a += PGSIZE;
@@ -175,19 +184,21 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 {
   uint64 a;
   pte_t *pte;
-
+  
   if((va % PGSIZE) != 0)
     panic("uvmunmap: not aligned");
 
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
     if((pte = walk(pagetable, a, 0)) == 0)
       panic("uvmunmap: walk");
-    if((*pte & PTE_V) == 0)
+    if((*pte & PTE_V) == 0){
+      printf("va: %p, pte:%p\n",va, PTE2PA(*pte));
       panic("uvmunmap: not mapped");
-    if(PTE_FLAGS(*pte) == PTE_V)
+    }if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
       uint64 pa = PTE2PA(*pte);
+      // printf("a:%p pa:%p, pte_c:%d\n", a,pa, *pte & PTE_C);
       kfree((void*)pa);
     }
     *pte = 0;
@@ -230,7 +241,7 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 {
   char *mem;
   uint64 a;
-
+  // printf("oldsz:%p, newsz:%p\n",oldsz,newsz);
   if(newsz < oldsz)
     return oldsz;
 
@@ -242,6 +253,7 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
       return 0;
     }
     memset(mem, 0, PGSIZE);
+      // printf("uvmalloc cpages i:%d pte:%p num:%d\n", a,(uint64)mem,CPAGESPR((uint64)mem));
     if(mappages(pagetable, a, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
       kfree(mem);
       uvmdealloc(pagetable, a, oldsz);
@@ -260,7 +272,7 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 {
   if(newsz >= oldsz)
     return oldsz;
-
+  // printf("uvmdealloc oldsz:%p, newsz:%p\n", oldsz, newsz);
   if(PGROUNDUP(newsz) < PGROUNDUP(oldsz)){
     int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
     uvmunmap(pagetable, PGROUNDUP(newsz), npages, 1);
@@ -283,6 +295,7 @@ freewalk(pagetable_t pagetable)
       freewalk((pagetable_t)child);
       pagetable[i] = 0;
     } else if(pte & PTE_V){
+      printf("freewalk cpages i:%d pte:%p num:%d\n", i,(uint64)PTE2PA(pte),CPAGESPR((uint64)PTE2PA(pte)));
       panic("freewalk: leaf");
     }
   }
@@ -294,6 +307,13 @@ freewalk(pagetable_t pagetable)
 void
 uvmfree(pagetable_t pagetable, uint64 sz)
 {
+  // printf("sz :%p, trap:%p\n", sz, TRAMPOLINE);
+  // prr("uvmfree user");
+  // printf("sz:%p\n", sz);
+  // uint64 va =  PGROUNDUP(sz)/PGSIZE;
+  // pte_t *pte = walk(pagetable,  va, 0);
+  // printf("uvmunmap va:%p, pages:%p\n", 0, PGROUNDUP(sz)/PGSIZE);
+  
   if(sz > 0)
     uvmunmap(pagetable, 0, PGROUNDUP(sz)/PGSIZE, 1);
   freewalk(pagetable);
@@ -311,30 +331,78 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
+  // printf("uvmcopy %p\n", sz);
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
+    //step1:將內容設置僞not able to write
+    *pte = *pte & ~PTE_W;
+    *pte = *pte | PTE_C;
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    //step2.3 將共享頁增加計數
+    // printf("uvmcopy cpages i:%p pte:%p num:%d\n", i,(uint64)pa,CPAGESPR((uint64)pa));
+    //step2:映射共享頁到頁表
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      // panic("uvmcopy err");
       goto err;
     }
+    CPAGESUP((uint64)pa);
   }
   return 0;
 
  err:
-  uvmunmap(new, 0, i / PGSIZE, 1);
+  // 应该不会出现这种情况不用考虑 
+  // uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
 }
 
+int cow_uvmcopy(pagetable_t page, uint64 addr){
+  //step1:find src content
+  // printf("cow_uvmcopy addr:%p\n", addr);
+  pte_t *pte;
+  uint64 pa;
+  uint flags;
+  if(addr >= MAXVA) return -1;
+  // addr = PGROUNDDOWN(addr);
+  if((pte = walk(page, addr, 0)) == 0)  return -1;
+    // panic("Cow: pte should exist");
+  if((*pte & PTE_U) == 0) return -1;
+  if((*pte & PTE_V) == 0) return -1;
+    // panic("Cow: page not present");
+  pa = PTE2PA(*pte);
+  //step2:將內容設置僞 able to write
+  flags = PTE_FLAGS(*pte);
+  // if((flags & PTE_W) && (flags & PTE_C))  panic("wr");
+  if(flags & PTE_W) return 0;  
+  else flags += PTE_W;
+  if((flags & PTE_C) == 0)  return -1; 
+  // flags -= PTE_C;
+// return -1;
+  //step3:copy from old to new;
+  char* mem = kalloc();
+  if(mem == 0){
+    // kfree(mem);
+    return -1;
+  }
+  *pte = (PTE_FLAGS(*pte) & ~PTE_C) | PTE_W | PA2PTE(mem);
+  memmove(mem, (char*)pa, PGSIZE);
+  kfree((void*)pa);
+  // printf("val: %d, pa:%d\n", *  mem, *(char*)pa);
+  // printf("cow_uvm addr:%p, pa: %p, mem:%p\n", PGROUNDDOWN(addr),pa, (uint64)mem);
+  //step3:son pid newsz with pa form parent pagetable_t,並且複寫共享page
+  // if(mappages(page, addr, PGSIZE, (uint64)mem, flags) != 0){
+  //   uvmunmap(page,addr, 1,1);
+  //   kfree(mem);
+  //   panic("uvmcopy err");
+  //   return -1;
+  //   // goto err;
+  // }
+  return 0;
+}
 // mark a PTE invalid for user access.
 // used by exec for the user stack guard page.
 void
@@ -355,17 +423,41 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
-
+  
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+    // if(checkcow(dstva)
+    if(cow_uvmcopy(pagetable,dstva) == -1)
+        return -1;
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
+    
+    // pte_t* pte;
+    // if((pte = walk(pagetable, va0, 0)) == 0){
+    //   return -1;
+    // }
+    // if(*pte & PTE_C){
+    //   char *mem;
+    //   uint flags;
+    //   if(CPAGESPR(pa0) == 2){
+    //     *pte = *pte | PTE_W;
+    //     *pte = *pte & ~PTE_C;
+    //   }else{
+    //     if((mem = kalloc()) == 0) return -1;
+    //     memmove(mem, (char*)pa0, PGSIZE);
+    //     CPAGESDOWN(pa0);
+    //     *pte = *pte | PTE_W;
+    //     *pte = *pte & ~PTE_C;
+    //     flags = PTE_FLAGS(*pte);
+    //     *pte = PA2PTE((uint64)mem) | flags;
+    //     pa0 = (uint64)mem;
+    //   }
+    // }
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
     memmove((void *)(pa0 + (dstva - va0)), src, n);
-
     len -= n;
     src += n;
     dstva = va0 + PGSIZE;
