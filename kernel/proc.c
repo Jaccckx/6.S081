@@ -121,6 +121,12 @@ found:
     return 0;
   }
 
+  for(int i = 1; i < 10; i++){
+    p -> vm[i].next = -1;
+    p -> vm[i].length = 0;
+  }
+  p -> vm[0].next = 0;
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -139,6 +145,10 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+
+  // for(int i = 1; i < 10; i++){
+    // if(p -> )
+  // }
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -273,6 +283,7 @@ fork(void)
     release(&np->lock);
     return -1;
   }
+
   np->sz = p->sz;
 
   np->parent = p;
@@ -691,6 +702,60 @@ procdump(void)
     else
       state = "???";
     printf("%d %s %s", p->pid, state, p->name);
+    for(int i = p -> vm[0].next; i; i = p -> vm[i].next){
+      printf("\nstart: %d, length: %d", p -> vm[i].start, p -> vm[i].length);
+    }
     printf("\n");
   }
+}
+
+uint64 mygrowproc(uint64 n){
+  struct proc* p = myproc();
+  struct vma* vm = p -> vm;
+  uint64 start = p -> sz;
+  int pre = 0;
+  int i, k;
+  for(i = vm[0].next; i != 0; i = vm[i].next){
+    if(start + n < vm[i].start)
+      break;
+
+    start = vm[i].start + vm[i].length;
+    pre = i;
+  }
+
+  for(k = 1; k < 10; k++){
+    if(vm[k].next == -1){
+      vm[k].next = i;
+      vm[k].start = start;
+      vm[k].length = n;
+
+      vm[pre].next = k;
+      uvmalloc(p -> pagetable, start, start + n);
+      // myallocuvm(p -> pagetable, start, start +n);
+      // switchuvm(p);
+      return start;
+    }
+  }
+  printf("warning: alloc vma fail\n");
+  return 0;
+}
+
+int myreduceproc(uint64 start){
+  int prev = 0;
+  int i;
+  struct proc* p = myproc();
+
+  for(i = p -> vm[0].next; i; i = p -> vm[i].next){
+    if(p -> vm[i].start == start && p -> vm[i].length > 0){
+      uvmdealloc(p -> pagetable, start + + p -> vm[i].length, start);
+      p -> vm[prev].next = p -> vm[i].next;
+      p -> vm[i].next = -1;
+      p -> vm[i].length = 0;
+      return 0;
+    }
+    prev = i;
+  }
+
+  printf("warning: free vma at %p\n", start);
+  return -1;
 }
