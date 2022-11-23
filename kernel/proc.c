@@ -311,6 +311,45 @@ fork(void)
   return pid;
 }
 
+int clone(void (*fcn)(void*), void* arg, void* stack){
+    return 0;
+    // struct proc* curproc = myproc();
+    // struct proc* np;
+    // if((np = allocproc) == 0)
+    //   return -1;
+
+    // np -> pagetable = curproc -> pagetable;
+    // np -> sz = curproc -> sz;
+    // np -> pthread = curproc;
+    // np -> ustack = stack;
+    // np -> parent = 0;
+    // *np -> trapframe = *curproc -> trapframe;
+
+    // int* sp = stack + PGSIZE - 8;
+
+    // np -> trapframe -> epc = (int)fcn;
+    // np -> trapframe -> sp = (int)sp;
+
+  
+    // *(sp + 1) = (int)arg;
+    // *sp = 0xffffffff;
+
+    // for(int i = 0; i < NOFILE; i++)
+    //   if(curproc -> ofile[i])
+    //     np -> ofile[i] = filedup(curproc -> ofile[i]);
+    
+    // np -> cwd = idup(curproc -> cwd);
+
+    // safestrcpy(np -> name, curproc -> name, sizeof(curproc -> name));
+
+    // int pid = np -> pid;
+
+    // acquire(&ptable.lock);
+    // np -> state = RUNNABLE;
+    // release(&ptable.lock);
+
+    // return pid;
+}
 // Pass p's abandoned children to init.
 // Caller must hold p->lock.
 void
